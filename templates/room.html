@@ -1,0 +1,9 @@
+{% extends '_base.html' %}{% load static %}
+{% block title %}Прохождение теста — IMEST{% endblock %}
+{% block scripts %}<script src="{% static 'room.js' %}" defer></script>{% endblock %}
+{% block content %}<div id="exam" data-attempt="{{ attempt_id }}">{% csrf_token %}
+<section class="page-heading"><div><p class="eyebrow">ВАША ПОПЫТКА</p><h1 id="exam-title">Загружаем тест…</h1></div><div class="timer-box"><span class="muted">Осталось времени</span><strong id="timer">—</strong></div></section>
+<p id="exam-error" class="error" role="alert"></p><button id="retry-save" class="button secondary" hidden>Повторить сохранение</button>
+<div id="exam-active" hidden><div class="exam-layout"><section class="card question-card"><div class="section-heading"><span id="question-counter" class="eyebrow"></span><span id="save-status" class="muted" role="status">Сохранено</span></div><h2 id="question-text"></h2><fieldset id="answer-options" class="stack"><legend class="sr-only">Выберите один ответ</legend></fieldset><div class="question-footer"><button id="previous-question" class="button secondary">← Назад</button><button id="next-question" class="button">Далее →</button></div></section><aside class="card question-sidebar"><h3>Навигация</h3><p class="muted" id="progress-text"></p><nav id="question-nav" aria-label="Вопросы теста"></nav><p class="hint">Зелёным отмечены вопросы с ответом.</p><button id="finish-test" class="button">Завершить тест</button></aside></div></div>
+<section id="exam-result" class="card result-card" hidden><span class="result-icon">✓</span><p class="eyebrow">ПОПЫТКА ЗАВЕРШЕНА</p><h2>Ваш результат</h2><p id="result-score" class="result-score"></p><p id="result-detail" class="muted"></p><a class="button" href="{% url 'home' %}">Вернуться в кабинет →</a></section>
+</div>{% endblock %}

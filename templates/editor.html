@@ -1,0 +1,17 @@
+{% extends '_base.html' %}{% load static %}
+{% block title %}Редактор теста — IMEST{% endblock %}
+{% block scripts %}<script src="{% static 'editor.js' %}" defer></script>{% endblock %}
+{% block content %}
+<section class="page-heading"><div><a class="back-link" href="{% url 'home' %}">← Все тесты</a><h1>{% if test %}{{ test.title }}{% else %}Новый тест{% endif %}</h1></div>{% if test %}<button class="copy-code" data-copy="{{ test.code }}">{{ test.code }} ⧉</button>{% endif %}</section>
+{% if test.status and test.status != 'draft' %}<div class="notice">Этот тест защищён от редактирования. Создайте копию, чтобы изменить вопросы. Архивирование закроет вход для новых участников; начатые попытки можно завершить.</div>{% endif %}
+{{ initial|json_script:'editor-data' }}
+<form id="editor-form" class="stack">{% csrf_token %}
+<fieldset id="editor-fields" {% if test and test.status != 'draft' %}disabled{% endif %}>
+<section class="card"><p class="eyebrow">01 / НАСТРОЙКИ</p><div class="form-grid"><label class="wide">Название теста<input name="title" required maxlength="255" placeholder="Например, Алгебра · Квадратные уравнения"></label><label>Класс<input name="classroom" maxlength="50" placeholder="Все классы вашей школы"></label><label>Длительность, минуты<input name="duration" type="number" value="30" min="1" max="480" required></label><label>Начало доступа (время вашего устройства)<input name="start_date" type="datetime-local" required></label></div></section>
+<section class="section-heading"><h2>02 / Вопросы</h2><span class="muted">Один правильный ответ · 1 балл за вопрос</span></section><div id="editor-questions" class="stack"></div><button type="button" id="add-question" class="button secondary">+ Добавить вопрос</button>
+</fieldset>
+<p id="editor-error" class="error" role="alert"></p><div class="editor-toolbar"><button class="button secondary" type="button" id="preview-test">Предпросмотр</button>
+{% if not test or test.status == 'draft' %}<button class="button" id="save-draft">Сохранить черновик</button>{% if test %}<button class="button secondary" type="button" id="publish-test">Сохранить и опубликовать →</button>{% endif %}{% endif %}
+{% if test %}<button class="button secondary" type="button" id="duplicate-test">Создать копию</button><a class="button secondary" href="{% url 'test-results' test.id %}">Результаты</a>{% if test.status != 'archived' %}<button class="text-button danger" type="button" id="archive-test">В архив</button>{% endif %}{% endif %}
+</div></form>
+{% endblock %}

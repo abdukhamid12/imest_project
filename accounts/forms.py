@@ -1,1 +1,32 @@
-from django.contrib.auth.forms import UserCreationForm, AuthenticationFormfrom django.contrib.auth.models import Userfrom django import formsclass SignUpForm(UserCreationForm):    class Meta:        model = User        fields = ['username', 'email', 'password1', 'password2']        widgets = {            'username': forms.TextInput(attrs={'class': 'form-control'}),            'email': forms.EmailInput(attrs={'class': 'form-control'}),            'password1': forms.PasswordInput(attrs={'class': 'form-control'}),            'password2': forms.PasswordInput(attrs={'class': 'form-control'}),        }class LoginForm(AuthenticationForm):    username = forms.CharField(max_length=254, widget=forms.TextInput(attrs={'class': 'form-control'}))    password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
+from django import forms
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib.auth.models import User
+
+
+class SignUpForm(UserCreationForm):
+    role = forms.ChoiceField(label='Я регистрируюсь как', choices=[('student', 'Ученик'), ('teacher', 'Учитель')])
+    first_name = forms.CharField(label='Имя', max_length=100)
+    last_name = forms.CharField(label='Фамилия', max_length=100)
+    school = forms.CharField(label='Школа', max_length=100, help_text='Укажите название так же, как ваш учитель.')
+    classroom = forms.CharField(label='Класс', max_length=50, required=False, help_text='Например, 9А. Для учителя можно оставить пустым.')
+
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'role', 'school', 'classroom', 'password1', 'password2']
+
+    def clean(self):
+        data = super().clean()
+        if data.get('role') == 'student' and not data.get('classroom'):
+            self.add_error('classroom', 'Укажите свой класс.')
+        return data
+
+
+class LoginForm(AuthenticationForm):
+    pass
+
+
+class ProfileForm(forms.Form):
+    first_name = forms.CharField(label='Имя', max_length=100)
+    last_name = forms.CharField(label='Фамилия', max_length=100)
+    school = forms.CharField(label='Школа', max_length=100)
+    classroom = forms.CharField(label='Класс', max_length=50)

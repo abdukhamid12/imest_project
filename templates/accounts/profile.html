@@ -1,0 +1,1 @@
+{% extends '_base.html' %}{% block title %}Профиль — IMEST{% endblock %}{% block content %}<section class="card narrow"><p class="eyebrow">ЛИЧНЫЕ ДАННЫЕ</p><h1>Мой профиль</h1><form method="post" class="stack">{% csrf_token %}{{ form.as_p }}<button class="button">Сохранить</button></form></section>{% endblock %}

@@ -1,1 +1,3 @@
-{% extends 'auth_base.html' %}{% block auth %}    <h2>Sign Up</h2>    <form method="post">        {% csrf_token %}        {{ form.as_p }}        <button type="submit" class="btn btn-outline-primary"><i class="bi bi-box-arrow-in-right"></i> Sign Up</button>        <br>        <br>        <span>Menda allaqachon shaxsiy kabinet bor: <a href="{% url 'login' %}">Login</a></span>    </form>{% endblock %}
+{% extends 'auth_base.html' %}
+{% block title %}Регистрация — IMEST{% endblock %}
+{% block auth %}<p class="eyebrow">НАЧНИТЕ ЗДЕСЬ</p><h2>Создать аккаунт</h2><form method="post" class="stack">{% csrf_token %}{{ form.as_p }}<button class="button">Зарегистрироваться →</button></form><p class="muted">Уже с нами? <a href="{% url 'login' %}">Войти</a></p>{% endblock %}
