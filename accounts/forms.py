@@ -4,19 +4,18 @@ from django.contrib.auth.models import User
 
 
 class SignUpForm(UserCreationForm):
-    role = forms.ChoiceField(label='Я регистрируюсь как', choices=[('student', 'Ученик'), ('teacher', 'Учитель')])
     first_name = forms.CharField(label='Имя', max_length=100)
     last_name = forms.CharField(label='Фамилия', max_length=100)
     school = forms.CharField(label='Школа', max_length=100, help_text='Укажите название так же, как ваш учитель.')
-    classroom = forms.CharField(label='Класс', max_length=50, required=False, help_text='Например, 9А. Для учителя можно оставить пустым.')
+    classroom = forms.CharField(label='Класс', max_length=50, help_text='Например, 9А.')
 
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'role', 'school', 'classroom', 'password1', 'password2']
+        fields = ['username', 'first_name', 'last_name', 'school', 'classroom', 'password1', 'password2']
 
     def clean(self):
         data = super().clean()
-        if data.get('role') == 'student' and not data.get('classroom'):
+        if not data.get('classroom'):
             self.add_error('classroom', 'Укажите свой класс.')
         return data
 

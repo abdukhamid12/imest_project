@@ -7,6 +7,7 @@ class OptionInput(serializers.Serializer):
 
 
 class QuestionInput(serializers.Serializer):
+    points = serializers.IntegerField(min_value=1, max_value=1000, default=1)
     text = serializers.CharField(max_length=5000)
     options = OptionInput(many=True, min_length=2, max_length=8)
 

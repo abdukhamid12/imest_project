@@ -16,4 +16,5 @@ jobs:
       - run: python manage.py makemigrations --check --dry-run
       - run: python manage.py test --noinput
       - run: node --check static/app.js && node --check static/editor.js && node --check static/room.js
+      - run: node --test scripts/room.test.cjs
       - run: python scripts/verify_concurrency.py

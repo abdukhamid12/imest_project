@@ -12,7 +12,7 @@ class Conflict(APIException):
 
 
 def finish(attempt, now):
-    attempt.score = sum(attempt.answers.get(str(q['id'])) == q['correct_id'] for q in attempt.snapshot)
+    attempt.score = sum(q.get('points', 1) for q in attempt.snapshot if attempt.answers.get(str(q['id'])) == q['correct_id'])
     attempt.finished_at = min(now, attempt.deadline)
 
 
@@ -49,6 +49,6 @@ def attempt_data(attempt):
         'revision': attempt.revision, 'started_at': attempt.started_at,
         'deadline': attempt.deadline, 'server_time': timezone.now(),
         'finished_at': attempt.finished_at, 'answers': attempt.answers,
-        'questions': [{k: v for k, v in q.items() if k != 'correct_id'} for q in attempt.snapshot],
-        'score': attempt.score if attempt.finished_at else None, 'total': len(attempt.snapshot),
+        'questions': [{k: v for k, v in q.items() if k not in {'correct_id', 'points'}} for q in attempt.snapshot],
+        'score': attempt.score if attempt.finished_at else None, 'total': len(attempt.snapshot), 'max_score': attempt.max_score if attempt.finished_at else None,
     }

@@ -3,6 +3,8 @@ from . import views
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('rating/', views.leaderboard, name='leaderboard'),
+    path('api/attempts/<int:pk>/events/', views.AttemptEventAPI.as_view()),
     path('accounts/', include('accounts.urls')),
     path('teacher/new/', views.editor, name='test-create'),
     path('teacher/tests/<int:pk>/', views.editor, name='test-edit'),

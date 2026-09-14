@@ -13,12 +13,14 @@ function remember() {
 }
 function showResult() {
     clearInterval(timerHandle); dirty = false;
+    document.getElementById('exam-guard').hidden = true;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     try { localStorage.removeItem(pendingKey); } catch {}
     document.getElementById('exam-active').hidden = true;
     document.getElementById('exam-result').hidden = false;
     document.querySelector('.timer-box').hidden = true;
-    document.getElementById('result-score').textContent = attempt.score + ' / ' + attempt.total;
-    document.getElementById('result-detail').textContent = Math.round(attempt.score / attempt.total * 100) + '% правильных ответов · Результат сохранён';
+    document.getElementById('result-score').textContent = attempt.score + ' / ' + attempt.max_score;
+    document.getElementById('result-detail').textContent = Math.round(attempt.score / attempt.max_score * 100) + '% от максимума баллов · Результат сохранён';
     retry.hidden = true; errorBox.textContent = '';
 }
 function renderQuestion() {
@@ -126,7 +128,7 @@ retry.addEventListener('click', async () => {
     if (!attempt.finished_at && Date.now() + clockOffset >= new Date(attempt.deadline).getTime()) complete(true);
 });
 window.addEventListener('online', () => { if (attempt && dirty && !conflicted) save(); });
-window.addEventListener('beforeunload', e => { if (dirty || saving) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (attempt && !attempt.finished_at) { e.preventDefault(); e.returnValue = ''; } });
 (async () => {
     try {
         attempt = await api('/api/attempts/' + attemptId + '/');
@@ -143,8 +145,60 @@ window.addEventListener('beforeunload', e => { if (dirty || saving) { e.preventD
                 retry.hidden = false; retry.textContent = 'Загрузить ответы с сервера';
             } else { try { localStorage.removeItem(pendingKey); } catch {} }
         }
-        document.getElementById('exam-active').hidden = false; renderQuestion();
+        document.getElementById('exam-guard').hidden = false; renderQuestion();
         timerHandle = setInterval(tick,1000); tick();
         if (dirty) save();
     } catch(e) { errorBox.textContent = e.message; retry.hidden = false; retry.textContent = 'Повторить загрузку'; }
 })();
+
+
+// These controls discourage leaving; browsers and operating systems retain control.
+const guard = document.getElementById('exam-guard');
+const guardMessage = document.getElementById('guard-message');
+let monitoring = false;
+const recentEvents = new Map();
+function recordEvent(kind) {
+    if (!attempt || attempt.finished_at || !monitoring) return;
+    const now = Date.now();
+    if (now - (recentEvents.get(kind) || 0) < 2000) return;
+    recentEvents.set(kind, now);
+    const body = JSON.stringify({kind, event_id: crypto.randomUUID()});
+    fetch('/api/attempts/' + attemptId + '/events/', {
+        method: 'POST', credentials: 'same-origin', keepalive: true,
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': examRoot.querySelector('[name=csrfmiddlewaretoken]').value}, body,
+    }).catch(() => {});
+}
+function pauseExam(kind) {
+    if (!attempt || attempt.finished_at || !monitoring) return;
+    recordEvent(kind);
+    document.getElementById('exam-active').hidden = true;
+    guard.hidden = false;
+    guardMessage.textContent = 'Вы покинули режим теста. Уходы фиксируются для учителя при наличии связи. Таймер продолжает идти. Вернитесь в полноэкранный режим, чтобы продолжить.';
+}
+document.getElementById('enter-exam').addEventListener('click', async () => {
+    try {
+        if (!document.fullscreenEnabled) {
+            guardMessage.textContent = 'Этот браузер не поддерживает полноэкранный режим. Откройте эту попытку на компьютере в браузере с поддержкой полного экрана. Таймер продолжает идти.';
+            return;
+        }
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+        if (attempt.finished_at) return;
+        monitoring = true;
+        guard.hidden = true;
+        document.getElementById('exam-active').hidden = false;
+    } catch {
+        guardMessage.textContent = 'Браузер не разрешил полноэкранный режим. Разрешите его и нажмите кнопку ещё раз. Таймер продолжает идти.';
+    }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseExam('hidden'); });
+window.addEventListener('blur', () => pauseExam('blur'));
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) pauseExam('fullscreen_exit'); });
+window.addEventListener('pagehide', () => recordEvent('page_exit'));
+document.addEventListener('contextmenu', e => { if (attempt && !attempt.finished_at) { e.preventDefault(); recordEvent('shortcut'); } });
+document.addEventListener('keydown', e => {
+    if (!attempt || attempt.finished_at) return;
+    const key = e.key.toLowerCase();
+    if (key === 'f12' || ((e.ctrlKey || e.metaKey) && (['u','s','p','n','t'].includes(key) || (e.shiftKey && ['i','j','c'].includes(key))))) {
+        e.preventDefault(); recordEvent('shortcut');
+    }
+});

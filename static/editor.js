@@ -18,6 +18,8 @@ function addQuestion(value = {text: '', options: [{text:'',is_correct:true},{tex
     const label = el('label', 'Текст вопроса');
     const text = el('textarea'); text.required = true; text.maxLength = 5000; text.rows = 3; text.value = value.text; text.className = 'question-input';
     label.append(text);
+    const pointsLabel = el('label', 'Баллы за правильный ответ');
+    const points = el('input'); points.type = 'number'; points.min = 1; points.max = 1000; points.step = 1; points.required = true; points.value = value.points ?? 1; points.className = 'question-points'; pointsLabel.append(points);
     const options = el('div', undefined, 'stack option-editor');
     function addOption(option = {text:'',is_correct:false}) {
         if (options.children.length >= 8) return;
@@ -31,7 +33,7 @@ function addQuestion(value = {text: '', options: [{text:'',is_correct:true},{tex
     value.options.forEach(addOption);
     const add = el('button','+ Вариант ответа','text-button'); add.type = 'button';
     add.addEventListener('click', () => { addOption(); editorDirty = true; });
-    card.append(heading, label, el('p','Отметьте кружком единственный правильный ответ. От 2 до 8 вариантов.','hint'), options, add);
+    card.append(heading, label, pointsLabel, el('p','Отметьте кружком единственный правильный ответ. От 2 до 8 вариантов.','hint'), options, add);
     questionList.append(card);
 }
 function localDate(date) {
@@ -52,6 +54,7 @@ function collectTest() {
         start_date: new Date(editorForm.elements.start_date.value).toISOString(),
         questions: Array.from(questionList.children).map(card => ({
             text: card.querySelector('textarea').value,
+            points: Number(card.querySelector('.question-points').value),
             options: Array.from(card.querySelector('.option-editor').children).map(row => ({
                 text: row.querySelector('[type=text]').value, is_correct: row.querySelector('[type=radio]').checked,
             })),
@@ -97,7 +100,7 @@ document.getElementById('preview-test').addEventListener('click', () => {
     dialog.append(heading, el('p','Так ученик увидит вопросы. Ответы в предпросмотре не сохраняются.','muted'));
     data.questions.forEach((q,i) => {
         const section = el('section', undefined, 'preview-question');
-        section.append(el('h3', (i+1) + '. ' + q.text));
+        section.append(el('h3', (i+1) + '. ' + q.text), el('p', 'За правильный ответ: ' + q.points + ' балл(ов)'));
         q.options.forEach(o => {
             const label = el('label', undefined, 'answer-option');
             const radio = el('input'); radio.type = 'radio'; radio.name = 'preview_' + i;

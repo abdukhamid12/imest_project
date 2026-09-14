@@ -273,3 +273,96 @@ class AssessmentTests(TestCase):
     def test_unknown_operation_rejected(self):
         attempt = self.start()
         self.assertEqual(self.api.post(f'/api/attempts/{attempt.id}/unknown/', self.payload(attempt), format='json').status_code, 400)
+
+
+    def test_weighted_grading_immutable_and_maximum(self):
+        self.q.points = 6
+        self.q.save()
+        q2 = Question.objects.create(test=self.test, text='Second', points=4)
+        AnswerOption.objects.create(question=q2, text='Yes', is_correct=True)
+        AnswerOption.objects.create(question=q2, text='No')
+        attempt = self.start()
+        self.q.points = 99
+        self.q.save()
+        response = self.submit(attempt)
+        self.assertEqual(response.data['score'], 6)
+        self.assertEqual(response.data['max_score'], 10)
+        self.assertEqual(response.data['total'], 2)
+        self.assertNotIn('correct_id', response.data['questions'][0])
+
+    def test_legacy_snapshot_defaults_to_one_point(self):
+        attempt = self.start()
+        attempt.snapshot[0].pop('points')
+        attempt.save()
+        response = self.submit(attempt)
+        self.assertEqual(response.data['score'], 1)
+        self.assertEqual(response.data['max_score'], 1)
+
+    def test_teacher_points_validation_and_copy(self):
+        self.api.force_login(self.teacher_user)
+        for points in [0, -1, 1001, 1.5]:
+            data = self.draft_payload()
+            data['questions'][0]['points'] = points
+            self.assertEqual(self.api.post('/api/teacher/tests/', data, format='json').status_code, 400)
+        data['questions'][0]['points'] = 6
+        response = self.api.post('/api/teacher/tests/', data, format='json')
+        pk = response.data['id']
+        self.assertEqual(Test.objects.get(pk=pk).questions.get().points, 6)
+        copied = self.api.post(f'/api/teacher/tests/{pk}/duplicate/', {}, format='json')
+        self.assertEqual(Test.objects.get(pk=copied.data['id']).questions.get().points, 6)
+
+    def test_public_rating_automatic_finished_only_and_ties(self):
+        attempt = self.start()
+        self.api.logout()
+        self.assertEqual(list(self.api.get('/rating/').context['students']), [])
+        self.api.force_login(self.user)
+        self.submit(attempt)
+        self.api.force_login(self.second_user)
+        second = self.start()
+        self.submit(second)
+        self.api.logout()
+        response = self.api.get('/')
+        self.assertEqual(response.status_code, 200)
+        rows = list(response.context['students'])
+        self.assertEqual([(r.total_points, r.place, r.completed) for r in rows], [(1,1,1),(1,1,1)])
+        # More points from another completed test accumulate without manual ranking entries.
+        extra = Test.objects.create(teacher=self.teacher, title='Extra')
+        TestAttempt.objects.create(student=self.student, test=extra, deadline=timezone.now(), finished_at=timezone.now(), score=6)
+        rows = list(self.api.get('/rating/').context['students'])
+        self.assertEqual([(r.total_points, r.place) for r in rows], [(7,1),(1,2)])
+
+    def test_events_owner_validation_deduplication_and_teacher_visibility(self):
+        from uuid import uuid4
+        attempt = self.start()
+        url = f'/api/attempts/{attempt.pk}/events/'
+        data = {'event_id':str(uuid4()), 'kind':'hidden'}
+        self.assertEqual(self.api.post(url, data, format='json').status_code, 200)
+        self.api.post(url, data, format='json')
+        self.assertEqual(attempt.events.count(), 1)
+        self.assertEqual(self.api.post(url, dict(data,kind='invalid'), format='json').status_code, 400)
+        self.api.force_login(self.second_user)
+        self.assertEqual(self.api.post(url, data, format='json').status_code, 404)
+        self.api.force_login(self.teacher_user)
+        response = self.api.get(f'/teacher/tests/{self.test.pk}/results/')
+        self.assertEqual(list(response.context['attempts'])[0].event_count, 1)
+        self.api.force_login(self.user)
+        self.submit(attempt)
+        self.api.post(url, dict(data,event_id=str(uuid4())), format='json')
+        self.assertEqual(attempt.events.count(), 1)
+
+
+    def test_active_attempt_never_exposes_question_points(self):
+        self.q.points = 6
+        self.q.save()
+        attempt = self.start()
+        for response in [self.api.get(f'/api/attempts/{attempt.id}/'), self.submit(attempt, operation='save')]:
+            self.assertEqual(response.status_code, 200)
+            self.assertIsNone(response.data['max_score'])
+            self.assertIsNone(response.data['score'])
+            for question in response.data['questions']:
+                self.assertNotIn('points', question)
+                self.assertNotIn('correct_id', question)
+        attempt.refresh_from_db()
+        finished = self.submit(attempt)
+        self.assertEqual(finished.data['score'], 6)
+        self.assertEqual(finished.data['max_score'], 6)

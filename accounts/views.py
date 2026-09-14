@@ -29,11 +29,8 @@ def signup(request):
             with transaction.atomic():
                 user = form.save()
                 data = form.cleaned_data
-                if data['role'] == 'teacher':
-                    Teacher.objects.create(user=user, school=data['school'])
-                else:
-                    Student.objects.create(user=user, name=data['first_name'], surname=data['last_name'],
-                        school=data['school'], classroom=data['classroom'])
+                Student.objects.create(user=user, name=data['first_name'], surname=data['last_name'],
+                    school=data['school'], classroom=data['classroom'])
             login(request, user)
             return redirect('home')
     return render(request, 'accounts/signup.html', {'form': form})

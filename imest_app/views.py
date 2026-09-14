@@ -4,7 +4,9 @@ from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum, Count, Q, Window
+from django.db.models.functions import Rank, Coalesce
+from rest_framework import serializers
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -13,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from .models import AnswerOption, Question, Student, Teacher, Test, TestAttempt
+from .models import AttemptEvent, AnswerOption, Question, Student, Teacher, Test, TestAttempt
 from .serializers import AttemptInput, TestInput
 from .services import attempt_data, update_attempt
 
@@ -41,18 +43,19 @@ def draft_data(test):
     return {
         'id': test.id, 'code': test.code, 'title': test.title, 'classroom': test.classroom,
         'start_date': test.start_date.isoformat(), 'duration': test.duration, 'status': test.status,
-        'questions': [{'text': q.text, 'options': [
+        'questions': [{'text': q.text, 'points': q.points, 'options': [
             {'text': o.text, 'is_correct': o.is_correct} for o in q.options.all()
         ]} for q in test.questions.all()],
     }
 
 
-@login_required
 def home(request):
+    if not request.user.is_authenticated:
+        return leaderboard(request)
     teacher = Teacher.objects.filter(user=request.user).first()
     if teacher:
         tests = Test.objects.filter(teacher=teacher).order_by('-id')
-        return render(request, 'teacher_dashboard.html', {'tests': Paginator(tests, 12).get_page(request.GET.get('page'))})
+        return render(request, 'teacher_dashboard.html', {'tests': Paginator(tests, 12).get_page(request.GET.get('page')), 'top_students': ranked_students()[:10]})
     student, _ = Student.objects.get_or_create(user=request.user, defaults={
         'name': request.user.first_name or request.user.username,
         'surname': request.user.last_name, 'school': '', 'classroom': '',
@@ -60,7 +63,7 @@ def home(request):
     for attempt in student.attempts.filter(finished_at__isnull=True, deadline__lte=timezone.now()):
         update_attempt(attempt.id)
     return render(request, 'index.html', {
-        'attempts': Paginator(student.attempts.select_related('test'), 12).get_page(request.GET.get('page')), 'student': student,
+        'attempts': Paginator(student.attempts.select_related('test'), 12).get_page(request.GET.get('page')), 'student': student, 'top_students': ranked_students()[:10],
     })
 
 
@@ -74,7 +77,7 @@ def editor(request, pk=None):
 @login_required
 def room(request, pk):
     attempt = get_object_or_404(TestAttempt, pk=pk, student__user=request.user)
-    return render(request, 'room.html', {'attempt_id': attempt.id})
+    return render(request, 'room.html', {'attempt_id': attempt.id, 'exam_page': True})
 
 
 @login_required
@@ -82,7 +85,7 @@ def results(request, pk):
     test = get_object_or_404(Test, pk=pk, teacher__user=request.user)
     for attempt in test.attempts.filter(finished_at__isnull=True, deadline__lte=timezone.now()):
         update_attempt(attempt.id)
-    attempts = test.attempts.select_related('student').order_by('-score', 'started_at')
+    attempts = test.attempts.select_related('student').annotate(event_count=Count('events')).order_by('-score', 'started_at')
     if request.GET.get('format') == 'csv':
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="results-{test.code}.csv"'
@@ -94,7 +97,7 @@ def results(request, pk):
             return "'" + value if value.lstrip().startswith(('=', '+', '-', '@')) else value
         for a in attempts:
             writer.writerow([safe(a.student), safe(a.student.classroom), a.score if a.finished_at else '',
-                len(a.snapshot), 'Завершён' if a.finished_at else 'В процессе',
+                a.max_score, 'Завершён' if a.finished_at else 'В процессе',
                 timezone.localtime(a.started_at).isoformat(),
                 timezone.localtime(a.finished_at).isoformat() if a.finished_at else ''])
         return response
@@ -138,7 +141,7 @@ class StartAPI(APIView):
             correct = [o.id for o in options if o.is_correct]
             if len(options) < 2 or len(correct) != 1:
                 raise ValidationError('В тесте некорректный вопрос. Обратитесь к учителю.')
-            snapshot.append({'id': q.id, 'text': q.text, 'correct_id': correct[0],
+            snapshot.append({'id': q.id, 'text': q.text, 'points': q.points, 'correct_id': correct[0],
                 'options': [{'id': o.id, 'text': o.text} for o in options]})
         if not snapshot:
             raise ValidationError('В тесте нет вопросов.')
@@ -209,6 +212,37 @@ class TeacherTestAPI(APIView):
             test.save()
             test.questions.all().delete()
         for question in questions:
-            q = Question.objects.create(test=test, text=question['text'])
+            q = Question.objects.create(test=test, text=question['text'], points=question['points'])
             AnswerOption.objects.bulk_create([AnswerOption(question=q, **o) for o in question['options']])
         return Response({'id': test.id, 'code': test.code})
+
+
+def ranked_students():
+    return Student.objects.filter(user__is_active=True).annotate(
+        total_points=Coalesce(Sum('attempts__score', filter=Q(attempts__finished_at__isnull=False)), 0),
+        completed=Count('attempts', filter=Q(attempts__finished_at__isnull=False)),
+    ).filter(completed__gt=0).annotate(place=Window(expression=Rank(), order_by=F('total_points').desc())).order_by('-total_points', 'id')
+
+
+def leaderboard(request):
+    for pk in TestAttempt.objects.filter(finished_at__isnull=True, deadline__lte=timezone.now()).values_list('pk', flat=True):
+        update_attempt(pk)
+    return render(request, 'leaderboard.html', {'students': Paginator(ranked_students(), 50).get_page(request.GET.get('page'))})
+
+
+class EventInput(serializers.Serializer):
+    event_id = serializers.UUIDField()
+    kind = serializers.ChoiceField(choices=['hidden', 'blur', 'fullscreen_exit', 'page_exit', 'shortcut'])
+
+
+class AttemptEventAPI(APIView):
+    def post(self, request, pk):
+        attempt = get_object_or_404(TestAttempt, pk=pk, student__user=request.user)
+        data = EventInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        if attempt.finished_at or timezone.now() >= attempt.deadline:
+            return Response({'recorded': False})
+        if attempt.events.count() >= 1000:
+            return Response({'recorded': False})
+        AttemptEvent.objects.get_or_create(attempt=attempt, event_id=data.validated_data['event_id'], defaults={'kind': data.validated_data['kind']})
+        return Response({'recorded': True})

@@ -67,6 +67,7 @@ class Test(models.Model):
 class Question(models.Model):
     test = models.ForeignKey(Test, related_name='questions', on_delete=models.CASCADE)
     text = models.TextField()
+    points = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(1000)])
     difficulty = models.IntegerField(default=1)
     correct_answer = models.CharField(max_length=255, blank=True)  # Legacy; is_correct is authoritative.
 
@@ -100,6 +101,10 @@ class TestAttempt(models.Model):
     score = models.PositiveIntegerField(default=0)
     revision = models.PositiveIntegerField(default=0)
 
+    @property
+    def max_score(self):
+        return sum(q.get('points', 1) for q in self.snapshot)
+
     class Meta:
         constraints = [models.UniqueConstraint(fields=['student', 'test'], name='one_attempt_per_student_test')]
         ordering = ['-started_at']
@@ -115,3 +120,13 @@ class StudentAnswer(models.Model):
 
     def __str__(self):
         return f'{self.student} — {self.test}'
+
+
+class AttemptEvent(models.Model):
+    attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE, related_name='events')
+    event_id = models.UUIDField()
+    kind = models.CharField(max_length=30, choices=[(v, v) for v in ['hidden', 'blur', 'fullscreen_exit', 'page_exit', 'shortcut']])
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['attempt', 'event_id'], name='unique_attempt_event')]

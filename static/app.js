@@ -51,11 +51,12 @@ if (lookupForm) lookupForm.addEventListener('submit', async event => {
             el('p', 'Доступен с ' + new Date(test.start_date).toLocaleString('ru-RU')));
         const start = el('button', test.attempt_id ? 'Открыть мою попытку →' : 'Начать попытку →', 'button');
         start.type = 'button'; start.disabled = !test.can_start && !test.attempt_id;
-        preview.append(el('p', 'Одна попытка. После старта время продолжает идти при закрытии страницы.', 'hint'), start);
+        preview.append(el('p', 'Одна попытка. Нужен полноэкранный режим; уходы из вкладки фиксируются для учителя. После старта время идёт даже при закрытии страницы.', 'hint'), start);
         preview.hidden = false;
         start.addEventListener('click', async () => {
             start.disabled = true;
             try {
+                if (!test.attempt_id && !document.fullscreenEnabled) throw new Error('Для теста нужен браузер с поддержкой полноэкранного режима. Попробуйте браузер на компьютере.');
                 const id = test.attempt_id || (await api('/api/tests/' + test.code + '/start/', {})).attempt_id;
                 window.location.assign('/attempts/' + id + '/');
             } catch (e) { error.textContent = e.message; start.disabled = false; }

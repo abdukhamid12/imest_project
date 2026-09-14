@@ -11,12 +11,12 @@
 </head>
 <body>
 <a class="skip" href="#main">Перейти к содержимому</a>
-<header class="header"><a class="brand" href="{% url 'home' %}"><span class="brand-icon">i</span> IMEST<span class="brand-caption">пространство знаний</span></a>
-<nav aria-label="Главная навигация">{% if user.is_authenticated %}
+{% if not exam_page %}<header class="header"><a class="brand" href="{% url 'home' %}"><span class="brand-icon">i</span> IMEST<span class="brand-caption">пространство знаний</span></a>
+<nav aria-label="Главная навигация"><a href="{% url 'leaderboard' %}">Рейтинг учеников</a>{% if user.is_authenticated %}
 <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
 <a href="{% url 'home' %}">Мой кабинет</a>
 <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button">Выйти</button></form>
-{% else %}<a href="{% url 'login' %}">Войти</a><a class="button small" href="{% url 'signup' %}">Создать аккаунт</a>{% endif %}</nav></header>
+{% else %}<a href="{% url 'login' %}">Войти</a><a class="button small" href="{% url 'signup' %}">Создать аккаунт</a>{% endif %}</nav></header>{% endif %}
 <main id="main" class="shell">
 {% for message in messages %}<div class="notice" role="status">{{ message }}</div>{% endfor %}
 {% block content %}{% endblock %}
